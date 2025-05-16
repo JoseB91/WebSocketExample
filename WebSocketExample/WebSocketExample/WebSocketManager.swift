@@ -14,11 +14,14 @@ class WebSocketManager: ObservableObject {
     @Published var connectionStatus: String = "Disconnected"
     @Published var messages: [String] = []
     @Published var currentPrice: String = "Loading..."
+    @Published var symbol: String = "BTC"
+    @Published var percentChange: Double = 0.0
+    let apiKey = ""
     
     func connect() {
         guard webSocketTask == nil else { return }
         
-        let url = URL(string: "wss://ws.coincap.io/prices?assets=bitcoin")!
+        let url = URL(string: "wss://streamer.cryptocompare.com/v2?api_key=\(apiKey)")!
         let session = URLSession(configuration: .default)
         webSocketTask = session.webSocketTask(with: url)
         
@@ -28,6 +31,8 @@ class WebSocketManager: ObservableObject {
         pingTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.ping()
         }
+        
+        sendSubscription()
         
         receiveMessage()
         connectionStatus = "Connected"
@@ -43,6 +48,23 @@ class WebSocketManager: ObservableObject {
     
     private func ping() {
         webSocketTask?.sendPing { [weak self] error in
+            if let error = error {
+                self?.handleError(error)
+            }
+        }
+    }
+    
+    private func sendSubscription() {
+        // Subscription message for BTC/USD price updates
+        let subscriptionMessage = """
+        {
+            "action": "SubAdd",
+            "subs": ["5~CCCAGG~BTC~USD"]
+        }
+        """
+        
+        let message = URLSessionWebSocketTask.Message.string(subscriptionMessage)
+        webSocketTask?.send(message) { [weak self] error in
             if let error = error {
                 self?.handleError(error)
             }
@@ -77,17 +99,20 @@ class WebSocketManager: ObservableObject {
     }
     
     private func processMessage(_ text: String) {
-        messages.append(text)
-        
-        // For CoinCap API, the message format is {"bitcoin":"29876.3253523657"}
         if let data = text.data(using: .utf8),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: String],
-           let price = json["bitcoin"] {
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             
-            if let doublePrice = Double(price) {
-                self.currentPrice = String(format: "$%.2f", doublePrice)
-            } else {
-                self.currentPrice = price
+            if let messageType = json["TYPE"] as? String, messageType == "5",
+               let fromSymbol = json["FROMSYMBOL"] as? String,
+               let price = json["PRICE"] as? Double {
+                
+                self.symbol = fromSymbol
+                self.currentPrice = String(format: "$%.2f", price)
+                
+                if let open24Hour = json["OPEN24HOUR"] as? Double, open24Hour > 0 {
+                    self.percentChange = ((price - open24Hour) / open24Hour) * 100
+                }
+                messages.append("\(symbol)/USD \(currentPrice) \(percentChange)")
             }
         }
         

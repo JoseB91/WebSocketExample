@@ -7,15 +7,13 @@
 
 import SwiftUI
 
-// MARK: - ContentView
 struct ContentView: View {
     @StateObject private var webSocketManager = WebSocketManager()
     
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
-                
-                // HStack for Status
+                // Status and controls
                 HStack {
                     Text("Status: \(webSocketManager.connectionStatus)")
                         .foregroundColor(statusColor)
@@ -36,15 +34,20 @@ struct ContentView: View {
                 }
                 .padding()
                 
-                // VStack for Bitcoin price
+                // Current Bitcoin price
                 VStack {
-                    Text("Bitcoin")
+                    Text("\(webSocketManager.symbol)/USD")
                         .font(.headline)
                     
                     Text(webSocketManager.currentPrice)
                         .font(.system(size: 42, weight: .bold))
                         .foregroundColor(.green)
-                        .padding()
+                    
+                    if webSocketManager.percentChange != 0 {
+                        Text("\(webSocketManager.percentChange >= 0 ? "+" : "-")\(String(format: "%.2f", webSocketManager.percentChange))%")
+                            .foregroundColor(webSocketManager.percentChange >= 0 ? .green : .red)
+                            .font(.headline)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
@@ -52,7 +55,7 @@ struct ContentView: View {
                 .cornerRadius(12)
                 .padding(.horizontal)
                 
-                // VStack for Recent messages
+                // Recent messages
                 VStack(alignment: .leading) {
                     Text("Recent Updates")
                         .font(.headline)
@@ -62,6 +65,7 @@ struct ContentView: View {
                         ForEach(webSocketManager.messages, id: \.self) { message in
                             Text(message)
                                 .font(.system(.body, design: .monospaced))
+                                .lineLimit(3)
                         }
                     }
                     .frame(height: 300)
